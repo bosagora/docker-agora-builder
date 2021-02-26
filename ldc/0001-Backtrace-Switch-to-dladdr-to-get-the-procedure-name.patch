@@ -1,0 +1,76 @@
+From 1063d1711b5da72c6098fea94f2a1b470b691a7e Mon Sep 17 00:00:00 2001
+From: Geod24 <pro.mathias.lang@gmail.com>
+Date: Sat, 9 Jan 2021 07:25:05 +0900
+Subject: Backtrace: Switch to dladdr to get the procedure name (libunwind)
+
+This experimental libunwind feature (not enabled by default nor released yet)
+has one big downside: it needs to allocate a very large buffer (128k) per trace handler.
+This is because `libunwind` only allow to write to a buffer that is provided to it.
+Since our symbols can be rather long, and we want to avoid GC allocations,
+a static buffer was used. But even worse, when walking up the stack trace,
+we have to eagerly store the function names, even if the user doesn't use this information.
+This is a big waste of time and resources, and an issue that the backtrace implementation
+doesn't share.
+After investigation, it turns out that libunwind uses `dladdr` under the hood
+(among other things, like string interning).
+`dladdr` is available on all platforms we target, and provides us we a C string
+on which we can use `strlen`, removing the need for those large buffers that are
+eagerly filled.
+---
+ runtime/druntime/src/core/internal/backtrace/handler.d | 20 +++++++++-----------
+ 1 file changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/runtime/druntime/src/core/internal/backtrace/handler.d b/runtime/druntime/src/core/internal/backtrace/handler.d
+index a182ec0f6..bbe4b7c99 100644
+--- a/runtime/druntime/src/core/internal/backtrace/handler.d
++++ b/runtime/druntime/src/core/internal/backtrace/handler.d
+@@ -18,6 +18,8 @@ module core.internal.backtrace.handler;
+ 
+ version (DRuntime_Use_Libunwind):
+ 
++import core.stdc.string : strlen;
++import core.sys.posix.dlfcn;
+ import core.internal.backtrace.dwarf;
+ import core.internal.backtrace.libunwind;
+ 
+@@ -26,9 +28,14 @@ class LibunwindHandler : Throwable.TraceInfo
+ {
+     private static struct FrameInfo
+     {
+-        char[1024] buff = void;
++        const(char)[] name () const @trusted nothrow @nogc
++        {
++            Dl_info info = void;
++            if (dladdr(this.address, &info) && info.dli_sname !is null)
++                return info.dli_sname[0 .. strlen(info.dli_sname)];
++            return null;
++        }
+ 
+-        const(char)[] name;
+         const(void)* address;
+     }
+ 
+@@ -46,8 +53,6 @@ class LibunwindHandler : Throwable.TraceInfo
+      */
+     public this (size_t frames_to_skip = 1) nothrow @nogc
+     {
+-        import core.stdc.string : strlen;
+-
+         static assert(typeof(FrameInfo.address).sizeof == unw_word_t.sizeof,
+                       "Mismatch in type size for call to unw_get_proc_name");
+ 
+@@ -62,13 +67,6 @@ class LibunwindHandler : Throwable.TraceInfo
+         unw_proc_info_t pip = void;
+         foreach (idx, ref frame; this.callstack)
+         {
+-            if (int r = unw_get_proc_name(
+-                    &cursor, frame.buff.ptr, frame.buff.length,
+-                    cast(unw_word_t*) &frame.address))
+-                frame.name = "<ERROR: Unable to retrieve function name>";
+-            else
+-                frame.name = frame.buff[0 .. strlen(frame.buff.ptr)];
+-
+             if (unw_get_proc_info(&cursor, &pip) == 0)
+                 frame.address += pip.start_ip;
+ 
+-- 

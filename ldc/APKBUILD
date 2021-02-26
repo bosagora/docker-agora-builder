@@ -1,0 +1,149 @@
+# Contributor: Mathias LANG <pro.mathias.lang@gmail.com>
+# Maintainer: Mathias LANG <pro.mathias.lang@gmail.com>
+pkgname=ldc
+pkgver=1.25.0
+pkgrel=1
+pkgdesc="The LLVM-based D Compiler"
+url="https://github.com/ldc-developers/ldc"
+# LDC does not support host compiling on most of the architecture Alpine supports
+arch="x86_64 aarch64"
+license="BSD-3-Clause AND BSL-1.0 AND ( Artistic-1.0 OR GPL-2.0-or-later ) AND NCSA AND MIT"
+depends="llvm-libunwind-dev tzdata"
+makedepends="chrpath cmake curl-dev diffutils gdmd llvm10-dev llvm10-static
+	libedit-dev zlib-dev"
+checkdepends="bash gdb grep llvm10-test-utils"
+# A user might want to install the '-runtime' subpackage when they have
+# a dynamically-linked D program.
+subpackages="
+	$pkgname-runtime
+	$pkgname-static
+	$pkgname-dbg
+	$pkgname-bash-completion:bashcomp:noarch"
+source="https://github.com/ldc-developers/ldc/releases/download/v$pkgver/ldc-$pkgver-src.tar.gz
+		0001-Backtrace-Switch-to-dladdr-to-get-the-procedure-name.patch"
+builddir="$srcdir/ldc-$pkgver-src/"
+
+build() {
+	# Note: The CI was running into OOM while building this package
+	# See https://gitlab.alpinelinux.org/alpine/aports/-/merge_requests/14364#note_122336
+	case "$CARCH" in x86*)
+		export MAKEFLAGS="$MAKEFLAGS -j$((JOBS<4 ? JOBS : 4))"
+		export DFLAGS="$DFLAGS -lowmem"
+		;;
+	esac
+	# First, build LDC using GDC
+	mkdir -p "$builddir/stage1"
+	if [ "$CBUILD" != "$CHOST" ]; then
+		CMAKE_CROSSOPTS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_NAME=Linux"
+	fi
+	unset DFLAGS
+	cmake \
+		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+		-DCMAKE_C_FLAGS="$CFLAGS" \
+		-DD_COMPILER='gdmd' \
+		-DADDITIONAL_DEFAULT_LDC_SWITCHES=' "-linker=bfd", "-link-defaultlib-shared"' \
+		$CMAKE_CROSSOPTS -S "$builddir" -B "$builddir/stage1"
+	make -C "$builddir/stage1"
+
+	# Then, self-build
+	if [ "$CBUILD" != "$CHOST" ]; then
+		CMAKE_CROSSOPTS="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_HOST_SYSTEM_NAME=Linux"
+	fi
+	# Don't use None buildtype for now, see
+	# https://github.com/ldc-developers/ldc/issues/3386#issuecomment-603370855
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DBUILD_SHARED_LIBS=True \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_CXX_FLAGS="$CXXFLAGS" \
+		-DCMAKE_C_FLAGS="$CFLAGS" \
+		-DD_COMPILER="$builddir/stage1/bin/ldmd2" \
+		-DC_SYSTEM_LIBS="unwind;m;pthread;rt;dl" \
+		-DADDITIONAL_DEFAULT_LDC_SWITCHES=' "-linker=bfd", "-link-defaultlib-shared"' \
+		$CMAKE_CROSSOPTS "$builddir"
+	make
+
+	# Build the test runners
+	make all-test-runners
+
+	# CMake added the rpaths to the shared libs (of stage1!) - strip them
+	chrpath -d "$builddir"/lib/*.so*
+	chrpath -d \
+		"$builddir"/bin/ldc2 \
+		"$builddir"/bin/ldmd2 \
+		"$builddir"/bin/ldc-build-runtime \
+		"$builddir"/bin/ldc-prune-cache
+}
+
+check() {
+	# Find the libraries we just built as final (not stage1!)
+	export LD_LIBRARY_PATH="$builddir"/lib
+
+	case "$CARCH" in
+		# Math & numeric related tests fail due to https://github.com/ldc-developers/ldc/issues/3270#issuecomment-613132406
+		# druntime-test-thread fails due to https://github.com/ldc-developers/ldc/issues/3403
+		aarch64)
+			_tests_ignore="|core\.thread\.fiber|std.*math.*|std\.numeric.*|std\.format|std\.algorithm\.sorting.*|druntime-test-thread|std\.complex.*"
+			;;
+		# https://github.com/ldc-developers/ldc/issues/3404
+		x86)
+			_tests_ignore="|druntime-test-thread"
+			;;
+	esac
+
+
+	# Note: The testsuite does not parallelize well, as the 'clean' target get run in parallel.
+	# Hence '-j${JOBS}' was left out on purpose
+	#
+	# - dmd-testsuite takes too long to run and has more to do with language checks
+	#	which are less relevant to us than platform integration tests
+	# - lit-test disabled because 'TEST 'LDC :: debuginfo/print_gdb.d' FAILED'
+	#	Something to do with TLS variables not being printable in GDB
+	# - 'druntime-test-shared' fails, probably because it is using 'Object.factory'
+	# - 'druntime-test-stdcpp' fails for an unknown reason and is temporarily disabled
+	# - 'druntime-test-exceptions' fails for an unknown reason and is temporarily disabled
+	ctest --output-on-failure -E "dmd-testsuite|lit-tests|druntime-test-exceptions|druntime-test-shared|druntime-test-stdcpp$_tests_ignore"
+}
+
+package() {
+	depends="$pkgname-static=$pkgver-r$pkgrel llvm-libunwind-dev"
+	# Use -j1, the install is flaky with too many build jobs
+	make -j1 DESTDIR="$pkgdir" install
+
+	mkdir -p "$pkgdir"/usr/share/bash-completion
+	mv "$pkgdir"/etc/bash_completion.d "$pkgdir"/usr/share/bash-completion/completions
+}
+
+runtime() {
+	depends="llvm-libunwind tzdata"
+	pkgdesc="Dynamic runtime library for D code compiled with $pkgname-$pkgver"
+
+	mkdir -p "$subpkgdir/usr/lib/"
+	for libn in "libdruntime" "libphobos2";
+	do
+		mv "$pkgdir"/usr/lib/$libn-ldc-shared.so* "$subpkgdir/usr/lib/"
+	done
+	mv "$pkgdir"/usr/lib/libldc-jit.so* "$subpkgdir/usr/lib"
+
+	mv "$pkgdir"/usr/lib/*.so* "$subpkgdir/usr/lib/"
+}
+
+static() {
+	depends="llvm-libunwind-static tzdata"
+	pkgdesc="$pkgdesc (static library)"
+
+	mkdir -p "$subpkgdir/usr/lib/"
+	mv "$pkgdir"/usr/lib/*.a "$subpkgdir/usr/lib/"
+}
+
+bashcomp() {
+	depends=""
+	pkgdesc="Bash completions for $pkgname"
+	install_if="$pkgname=$pkgver-r$pkgrel bash-completion"
+
+	amove usr/share/bash-completion/completions
+}
+
+sha512sums="3d9ad537c59c84263221d0934be59a0a5fe0691577656d8c9b340f7da0b4dcace7f2c2c069dea04eca66d1f3b73852b1745371fe04545b1f0daaea456d3ab66a  ldc-1.25.0-src.tar.gz
+0b11807a879e025946f43ae0a95ed605e472ce940b58f90f3023d88e025a3f5a7fda9f3b1c38f66282d6ab81f216daedbbf96c5c2ec44b1d429be0721e1d737b  0001-Backtrace-Switch-to-dladdr-to-get-the-procedure-name.patch"

@@ -1,0 +1,65 @@
+# Contributor: Mathias LANG <pro.mathias.lang@gmail.com>
+# Maintainer: Mathias LANG <pro.mathias.lang@gmail.com>
+pkgname=dub
+pkgver=1.24.1
+pkgrel=0
+pkgdesc="Package and build management system for D"
+url="https://code.dlang.org/"
+arch="aarch64 x86_64" # gdc does not work on 32 bit at this point
+license="MIT"
+depends="libcurl"
+makedepends="gcc-gdc gdmd bash curl-dev"
+subpackages="$pkgname-zsh-completion:zsh:noarch $pkgname-doc:doc:noarch"
+source="$pkgname-$pkgver.zip::https://github.com/dlang/dub/archive/v$pkgver.zip
+		0001-Revert-cache-the-generated-test-main-file-dub_test_r.patch"
+
+build() {
+	# Default abuild.conf has '-Os' which gdmd doesn't support
+	# Since we later build the man pages using dub, make it persistent
+	DFLAGS=""
+
+	# The build script needs a DMD-like interface to pass its arguments, so use gdmd
+	DMD=gdmd GITVER="v$pkgver" gdmd -run "$builddir/build.d"
+
+	# Build man pages
+	"$builddir/bin/dub" --compiler=gdc --single scripts/man/gen_man.d
+}
+
+check() {
+	bin/dub test
+}
+
+package() {
+	install -s -D "$builddir/bin/dub" "$pkgdir/usr/bin/dub"
+	install -Dm644 "$builddir/scripts/zsh-completion/_dub" "$pkgdir/usr/share/zsh/site-functions/_dub"
+	mkdir -p "$pkgdir/usr/share/man/man1/"
+	cp "$builddir"/scripts/man/*.1 "$pkgdir/usr/share/man/man1/"
+}
+
+zsh() {
+	pkgdesc="Zsh completion for dub"
+	depends=""
+	install_if="$pkgname=$pkgver-r$pkgrel zsh"
+
+	mkdir -p "$subpkgdir"/usr/share/zsh/site-functions
+	mv "$pkgdir"/usr/share/zsh/site-functions/* \
+		"$subpkgdir"/usr/share/zsh/site-functions
+	# Satisfy abuild's linter
+	rmdir "$pkgdir"/usr/share/zsh/site-functions
+}
+
+doc() {
+	pkgdesc="Man pages for dub"
+	depends=""
+	install_if="$pkgname=$pkgver-r$pkgrel docs"
+
+	gzip -9 "$pkgdir"/usr/share/man/man1/*
+	mkdir -p "$subpkgdir"/usr/share/man/man1
+	mv "$pkgdir"/usr/share/man/man1/* "$subpkgdir"/usr/share/man/man1/
+	# Satisfy abuild's linter
+	rmdir "$pkgdir"/usr/share/man/man1/
+	rmdir "$pkgdir"/usr/share/man/
+}
+
+sha512sums="566e30a86ab9fd4a176c8c6da1ed38f5c60e81ad7c1007f85e3f7b7d2b73f3e50b1f1f6a9dbba9379297cc736f3e512ea1ed659a26e6f945bcc567b4332cf496  dub-1.24.1.zip
+76cf9b9906280e378dee7995dd1ff84abfb00fcd8088f2c151cd58d18908f11bd131efe651d3c4c83f10bee0c5801620b4cad2bb4bed8156d7e9f8e0bba81fd4  0001-Revert-cache-the-generated-test-main-file-dub_test_r.patch"
