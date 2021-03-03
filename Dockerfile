@@ -11,6 +11,7 @@ RUN abuild -r
 FROM alpine:edge
 COPY --from=Builder --chown=root:root /home/effortman/.abuild/*.rsa.pub /etc/apk/keys/
 COPY --from=Builder /home/effortman/packages/ /root/packages
-RUN apk --no-cache add -X /root/packages/build/ ldc=1.25.0-r1 dub=1.24.1-r0 && \
-    rm -rf /root/packages/
+RUN apk --no-cache add -X /root/packages/build/ ldc=1.25.1-r0 dub=1.24.1-r0
+# Do not delete the packages, as the runner might need to copy the runtime
+# RUN rm -rf /root/packages/
 RUN apk --no-cache add build-base dtools-rdmd git libsodium-dev llvm-libunwind-dev openssl-dev sqlite-dev zlib-dev
