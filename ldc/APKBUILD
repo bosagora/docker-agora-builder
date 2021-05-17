@@ -20,7 +20,7 @@ subpackages="
 	$pkgname-dbg
 	$pkgname-bash-completion:bashcomp:noarch"
 source="https://github.com/ldc-developers/ldc/releases/download/v$pkgver/ldc-$pkgver-src.tar.gz
-		0001-Backtrace-Switch-to-dladdr-to-get-the-procedure-name.patch"
+		0001-Libunwind-Use-dladdr-to-get-function-name.patch"
 builddir="$srcdir/ldc-$pkgver-src/"
 
 build() {
@@ -146,4 +146,4 @@ bashcomp() {
 }
 
 sha512sums="7bb2aa464f5ba834c07f67743f4af01db6588d56611d6c9e250a6908ebe93a0dcd9d3a79f8f252fc92eeb4826bfa62de6c51c4db03ff80e60a8d993e4451f573  ldc-1.26.0-src.tar.gz
-0b11807a879e025946f43ae0a95ed605e472ce940b58f90f3023d88e025a3f5a7fda9f3b1c38f66282d6ab81f216daedbbf96c5c2ec44b1d429be0721e1d737b  0001-Backtrace-Switch-to-dladdr-to-get-the-procedure-name.patch"
+d47d1659750e62864460f27a9c80bb800c2b7b1e58b216f824b039b771659ec3a05c03df44ab6881ff331c2cae1583f80ecd87bb3a8914d1fb0aee9f2d8e58bc  0001-Libunwind-Use-dladdr-to-get-function-name.patch"
