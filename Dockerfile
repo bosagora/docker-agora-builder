@@ -14,4 +14,5 @@ COPY --from=Builder /home/effortman/packages/ /root/packages
 RUN apk --no-cache add -X /root/packages/build/ ldc=1.26.0-r0 dub=1.24.1-r0
 # Do not delete the packages, as the runner might need to copy the runtime
 # RUN rm -rf /root/packages/
-RUN apk --no-cache add build-base dtools-rdmd git libsodium-dev llvm-libunwind-dev openssl-dev sqlite-dev zlib-dev clang
+RUN apk --no-cache add \
+    build-base clang dtools-rdmd git libsodium-dev linux-headers llvm-libunwind-dev npm openssl-dev python3 sqlite-dev zlib-dev
