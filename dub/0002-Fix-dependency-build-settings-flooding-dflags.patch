@@ -1,0 +1,35 @@
+From 73e337c293e03cfb9ba052bb8721c89f98f9a58c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=C3=96mer=20Faruk=20Irmak?= <omerfirmak@gmail.com>
+Date: Tue, 1 Jun 2021 13:38:03 +0300
+Subject: [PATCH] Fix dependency build settings flooding dflags
+
+---
+ source/dub/compilers/buildsettings.d | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/source/dub/compilers/buildsettings.d b/source/dub/compilers/buildsettings.d
+index 7fcf2898..594d38fd 100644
+--- a/source/dub/compilers/buildsettings.d
++++ b/source/dub/compilers/buildsettings.d
+@@ -13,7 +13,8 @@ import std.array : array;
+ import std.algorithm : filter, any;
+ import std.path : globMatch;
+ import std.typecons : BitFlags;
+-
++import std.algorithm.iteration : uniq;
++import std.range : chain;
+ 
+ /// BuildPlatform specific settings, like needed libraries or additional
+ /// include paths.
+@@ -105,7 +106,7 @@ struct BuildSettings {
+ 		addPostRunCommands(bs.postRunCommands);
+ 	}
+ 
+-	void addDFlags(in string[] value...) { dflags ~= value; }
++	void addDFlags(in string[] value...) { dflags = chain(dflags, value.dup).uniq.array; }
+ 	void prependDFlags(in string[] value...) { prepend(dflags, value); }
+ 	void removeDFlags(in string[] value...) { remove(dflags, value); }
+ 	void addLFlags(in string[] value...) { lflags ~= value; }
+-- 
+2.31.1
+
