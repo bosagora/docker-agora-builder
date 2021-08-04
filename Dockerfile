@@ -1,5 +1,5 @@
 # Build the packages used by agora that haven't been upstreamed yet.
-FROM bpfk/pkgbuilder:latest AS Builder
+FROM bosagora/pkgbuilder:latest AS Builder
 ADD --chown=effortman:abuild ldc/ /build/ldc/
 ADD --chown=effortman:abuild dub/ /build/dub/
 RUN sudo apk update
