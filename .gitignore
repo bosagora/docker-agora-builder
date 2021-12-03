@@ -1,2 +1,6 @@
 # Emacs files
 *~
+
+# Build artifacts
+dub/src/
+ldc/src/
