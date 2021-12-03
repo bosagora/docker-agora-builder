@@ -16,4 +16,4 @@ COPY --from=Builder --chown=root:root /home/effortman/.abuild/*.rsa.pub /etc/apk
 # RUN rm -rf /root/packages/
 RUN apk --no-cache add \
     build-base clang dtools dub git ldc libsodium-dev linux-headers llvm-libunwind-dev npm \
-    openssl1.1-compat-dev python3 sqlite-dev zlib-dev
+    openssl-dev python3 sqlite-dev zlib-dev
