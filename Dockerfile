@@ -1,4 +1,4 @@
-# Build the packages used by agora that haven't been upstreamed yet.
+# Build the packages used by agora that haven't been upstreamed/updated yet.
 FROM bosagora/pkgbuilder:latest AS Builder
 ADD --chown=effortman:abuild ldc/ /build/ldc/
 ADD --chown=effortman:abuild dub/ /build/dub/
