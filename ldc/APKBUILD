@@ -1,7 +1,7 @@
 # Contributor: Mathias LANG <pro.mathias.lang@gmail.com>
 # Maintainer: Mathias LANG <pro.mathias.lang@gmail.com>
 pkgname=ldc
-pkgver=1.28.0
+pkgver=1.28.1
 pkgrel=0
 pkgdesc="The LLVM-based D Compiler"
 url="https://github.com/ldc-developers/ldc"
